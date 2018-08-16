@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/qor/oss"
+	"github.com/aghape/oss"
 )
 
 // FileSystem file system storage
@@ -31,6 +31,14 @@ func (fileSystem FileSystem) GetFullPath(path string) string {
 		fullpath, _ = filepath.Abs(filepath.Join(fileSystem.Base, path))
 	}
 	return fullpath
+}
+
+func (fileSystem FileSystem) Stat(path string) (info os.FileInfo, notFound bool, err error) {
+	info, err = os.Stat(fileSystem.GetFullPath(path))
+	if err != nil && os.IsNotExist(err) {
+		return nil, true, nil
+	}
+	return
 }
 
 // Get receive file with given path
@@ -95,5 +103,12 @@ func (fileSystem FileSystem) List(path string) ([]*oss.Object, error) {
 
 // GetEndpoint get endpoint, FileSystem's endpoint is /
 func (fileSystem FileSystem) GetEndpoint() string {
+	return "/"
+}
+
+func (fileSystem FileSystem) GetURL(p ...string) string {
+	if len(p) > 0 {
+		return "/" + strings.TrimPrefix(strings.Join(p, "/"), "/")
+	}
 	return "/"
 }

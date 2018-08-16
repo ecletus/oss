@@ -1,1 +1,6 @@
-test_env
+.*
+*.map
+*.swp
+*.exe
+*~
+~*

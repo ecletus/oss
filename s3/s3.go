@@ -20,7 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/qor/oss"
+	"github.com/aghape/oss"
 )
 
 // Client S3 storage
@@ -77,6 +77,23 @@ func New(config *Config) *Client {
 	}
 
 	return client
+}
+
+// Stat receive file stat by path
+func (client Client) Stat(path string) (info *os.FileInfo, notFound bool, err error) {
+	getResponse, err := client.S3.HeadObject(&s3.GetObjectInput{
+		Bucket: aws.String(client.Config.Bucket),
+		Key:    aws.String(client.ToRelativePath(path)),
+	})
+
+	if err == nil {
+		info = &fileStat{name:filepath.Base(path), size: *getResponse.ContentLength,
+			modTime: *getResponse.LastModified}
+	} else if strings.Contains(err.Error(), "NoSuchKey") {
+		return nil, true, nil
+	}
+
+	return
 }
 
 // Get receive file with given path
