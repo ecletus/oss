@@ -3,7 +3,7 @@ package oss
 import (
 	"github.com/aghape/oss"
 	"github.com/aghape/oss/filesystem"
-	"github.com/aghape/aghape"
+	"github.com/aghape/core"
 )
 
 var Storages = &StoragesManager{nil,
@@ -40,12 +40,12 @@ func (s *StoragesManager) GetOrDefault(name string) oss.StorageInterface {
 	return storage
 }
 
-func (s *StoragesManager) ResolveName(context *qor.Context, name string) oss.StorageInterface {
+func (s *StoragesManager) ResolveName(context *core.Context, name string) oss.StorageInterface {
 	name = s.NameResolvers.Discovery(context, name)
 	return s.Get(name)
 }
 
-func (s *StoragesManager) ResolveNameOrDefault(context *qor.Context, name string) oss.StorageInterface {
+func (s *StoragesManager) ResolveNameOrDefault(context *core.Context, name string) oss.StorageInterface {
 	name = s.NameResolvers.Discovery(context, name)
 	return s.GetOrDefault(name)
 }
@@ -66,7 +66,7 @@ type StorageNamesResolver struct {
 
 type StorageNameDiscover struct {
 	Name            string
-	Context         *qor.Context
+	Context         *core.Context
 	CurrentResolver *StorageNameResolver
 	Resolver        *StorageNameResolver
 	Parent          *StorageNameDiscover
@@ -85,7 +85,7 @@ func (nd *StorageNameDiscover) Next() {
 	}
 }
 
-func (r *StorageNamesResolver) Discovery(context *qor.Context, name string) string {
+func (r *StorageNamesResolver) Discovery(context *core.Context, name string) string {
 	snd := &StorageNameDiscover{name, context, r.FirstResolver, nil, nil}
 	snd.Next()
 	return snd.Name
