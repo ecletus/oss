@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aghape/helpers"
+	"github.com/ecletus/helpers"
 
-	"github.com/aghape/oss"
-	"github.com/aghape/oss/factories"
+	"github.com/ecletus/oss"
+	"github.com/ecletus/oss/factories"
 	"github.com/secsy/goftp"
 )
 

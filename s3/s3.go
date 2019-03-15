@@ -20,7 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aghape/oss"
+	"github.com/ecletus/oss"
 )
 
 // Client S3 storage

@@ -9,15 +9,15 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aghape/helpers"
+	"github.com/ecletus/helpers"
 
-	"github.com/aghape/oss/factories"
+	"github.com/ecletus/oss/factories"
 
 	"github.com/moisespsena/go-error-wrap"
 
 	"github.com/moisespsena/go-path-helpers"
 
-	"github.com/aghape/oss"
+	"github.com/ecletus/oss"
 )
 
 func init() {

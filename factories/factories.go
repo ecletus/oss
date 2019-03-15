@@ -1,7 +1,7 @@
 package factories
 
 import (
-	"github.com/aghape/oss"
+	"github.com/ecletus/oss"
 	"github.com/moisespsena-go/stringvar"
 	"github.com/moisespsena/go-options"
 )

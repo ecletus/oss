@@ -3,7 +3,7 @@ package ftp_test
 import (
 	"github.com/goftp/server"
 	"testing"
-	"github.com/aghape/oss/ftp"
+	"github.com/ecletus/oss/ftp"
 	"bytes"
 	"io/ioutil"
 )

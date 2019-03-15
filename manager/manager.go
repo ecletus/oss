@@ -1,9 +1,9 @@
 package oss
 
 import (
-	"github.com/aghape/oss"
-	"github.com/aghape/oss/filesystem"
-	"github.com/aghape/core"
+	"github.com/ecletus/oss"
+	"github.com/ecletus/oss/filesystem"
+	"github.com/ecletus/core"
 )
 
 var Storages = &StoragesManager{nil,
