@@ -1,22 +1,47 @@
 package ftp
 
 import (
-	"github.com/secsy/goftp"
-	"time"
 	"io"
-	"path/filepath"
-	"github.com/aghape/oss"
 	"io/ioutil"
+	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/aghape/helpers"
+
+	"github.com/aghape/oss"
+	"github.com/aghape/oss/factories"
+	"github.com/secsy/goftp"
 )
+
+func init() {
+	factories.Registry("fs", factories.StorageFactoryFunc(func(ctx *factories.Context, config map[string]interface{}) (storage oss.StorageInterface, err error) {
+		var cfg Config
+		if err = helpers.ParseMap(config, &cfg); err != nil {
+			return nil, err
+		}
+
+		if ctx.Var != nil {
+			ctx.Var.FormatPathPtr(&cfg.RootDir).
+				FormatPtr(&cfg.Endpoint.Path, &cfg.Endpoint.Host, &cfg.User, &cfg.Password)
+
+			for i := range cfg.Hosts {
+				ctx.Var.FormatPtr(&cfg.Hosts[i])
+			}
+		}
+
+		return New(cfg)
+	}))
+}
 
 type Config struct {
 	Hosts              []string
 	RootDir            string
 	User               string
 	Password           string
-	Endpoint           string
+	Endpoint           oss.Endpoint
 	ConnectionsPerHost int
 	// value in seconds
 	Timeout int64
@@ -25,6 +50,7 @@ type Config struct {
 type Client struct {
 	Config Config
 	Client *goftp.Client
+	fs     http.FileSystem
 }
 
 func New(config Config) (*Client, error) {
@@ -43,17 +69,35 @@ func New(config Config) (*Client, error) {
 		config.RootDir = strings.TrimPrefix(config.RootDir, "/")
 	}
 
-	if config.Endpoint != "" {
-		config.Endpoint = strings.TrimSuffix(config.Endpoint, "/")
+	if config.Endpoint.Path != "" {
+		config.Endpoint.Path = strings.TrimSuffix(config.Endpoint.Path, "/")
 	}
+	c := &Client{config, client, nil}
+	return c, nil
+}
 
-	return &Client{config, client}, nil
+func (client Client) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	file, err := client.Get(r.URL.Path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.NotFound(w, r)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+	s, err := file.Stat()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.ServeContent(w, r, r.URL.Path, s.ModTime(), file)
 }
 
 // Get receive file with given path
 func (client Client) Path(path string) string {
 	if path[0:2] == "//" {
-		ep := client.Config.Endpoint
+		ep := client.Config.Endpoint.Path
 		for _, prefix := range []string{"http:", "https:"} {
 			ep = strings.TrimPrefix(ep, prefix)
 		}
@@ -191,13 +235,22 @@ func (client Client) List(path string) ([]*oss.Object, error) {
 }
 
 // GetEndpoint get endpoint, FileSystem's endpoint is /
-func (client Client) GetEndpoint() string {
-	return client.Config.Endpoint
+func (client Client) GetEndpoint() *oss.Endpoint {
+	return &client.Config.Endpoint
 }
 
-func (client Client) GetURL(p ...string) string {
+func (client Client) GetURL(p ...string) (url string) {
+	url = client.Config.Endpoint.URL()
 	if len(p) > 0 {
-		return client.Config.Endpoint + "/" + strings.TrimPrefix(strings.Join(p, "/"), "/")
+		url += "/" + strings.TrimPrefix(strings.Join(p, "/"), "/")
 	}
-	return client.Config.Endpoint
+	return
+}
+
+func (client Client) GetDynamicURL(scheme, host string, p ...string) (url string) {
+	url = client.Config.Endpoint.DinamicURL(scheme, host)
+	if len(p) > 0 {
+		url += "/" + strings.TrimPrefix(strings.Join(p, "/"), "/")
+	}
+	return
 }

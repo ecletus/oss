@@ -2,26 +2,72 @@ package filesystem
 
 import (
 	"fmt"
+	"github.com/mitchellh/go-homedir"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/aghape/helpers"
+
+	"github.com/aghape/oss/factories"
+
+	"github.com/moisespsena/go-error-wrap"
+
+	"github.com/moisespsena/go-path-helpers"
+
 	"github.com/aghape/oss"
 )
 
+func init() {
+	factories.Registry("fs", factories.StorageFactoryFunc(func(ctx *factories.Context, config map[string]interface{}) (storage oss.StorageInterface, err error) {
+		var cfg Config
+		if err = helpers.ParseMap(config, &cfg); err != nil {
+			return nil, err
+		}
+		if ctx.Var != nil {
+			ctx.Var.FormatPathPtr(&cfg.RootDir)
+			if cfg.Endpoint != nil {
+				ctx.Var.FormatPtr(&cfg.Endpoint.Path, &cfg.Endpoint.Host)
+			}
+		}
+		return New(&cfg), nil
+	}))
+}
+
+type Config struct {
+	RootDir  string
+	Endpoint *oss.Endpoint
+}
+
 // FileSystem file system storage
 type FileSystem struct {
-	Base string
+	Base     string
+	Endpoint oss.Endpoint
 }
 
 // New initialize FileSystem storage
-func New(base string) *FileSystem {
-	absbase, err := filepath.Abs(base)
+func New(cfg *Config) *FileSystem {
+	if cfg.RootDir != "" && cfg.RootDir[0] == '~' {
+		if hpth, err := homedir.Expand(cfg.RootDir); err == nil {
+			cfg.RootDir = hpth
+		}
+	}
+
+	absbase, err := filepath.Abs(cfg.RootDir)
 	if err != nil {
 		fmt.Println("FileSystem storage's directory haven't been initialized")
 	}
-	return &FileSystem{Base: absbase}
+	if cfg.Endpoint == nil {
+		cfg.Endpoint = &oss.Endpoint{Path: "!"}
+	}
+	return &FileSystem{Base: absbase, Endpoint: *cfg.Endpoint}
+}
+
+func (f FileSystem) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	pth := f.GetFullPath(r.URL.Path)
+	http.ServeFile(w, r, pth)
 }
 
 // GetFullPath get full path from absolute/relative path
@@ -49,22 +95,29 @@ func (fileSystem FileSystem) Get(path string) (*os.File, error) {
 // Put store a reader into given path
 func (fileSystem FileSystem) Put(path string, reader io.Reader) (*oss.Object, error) {
 	var (
-		fullpath = fileSystem.GetFullPath(path)
-		err      = os.MkdirAll(filepath.Dir(fullpath), os.ModePerm)
+		fullpath      = fileSystem.GetFullPath(path)
+		base          = filepath.Dir(fullpath)
+		baseMode, err = path_helpers.ResolvePerms(base)
 	)
 
 	if err != nil {
-		return nil, err
+		return nil, errwrap.Wrap(err, "Resolve mode of %q", base)
+	}
+
+	if err = os.MkdirAll(base, os.FileMode(baseMode)); err != nil {
+		return nil, errwrap.Wrap(err, "Create base directory %q", base)
 	}
 
 	dst, err := os.Create(fullpath)
 
-	if err == nil {
-		if seeker, ok := reader.(io.ReadSeeker); ok {
-			seeker.Seek(0, 0)
-		}
-		_, err = io.Copy(dst, reader)
+	if err != nil {
+		return nil, errwrap.Wrap(err, "Create file %q", fullpath)
 	}
+
+	if seeker, ok := reader.(io.ReadSeeker); ok {
+		seeker.Seek(0, 0)
+	}
+	_, err = io.Copy(dst, reader)
 
 	return &oss.Object{Path: path, Name: filepath.Base(path), StorageInterface: fileSystem}, err
 }
@@ -101,14 +154,19 @@ func (fileSystem FileSystem) List(path string) ([]*oss.Object, error) {
 	return objects, nil
 }
 
-// GetEndpoint get endpoint, FileSystem's endpoint is /
-func (fileSystem FileSystem) GetEndpoint() string {
-	return "/"
+// GetEndpoint get Endpoint, FileSystem's Endpoint is /
+func (fileSystem FileSystem) GetEndpoint() *oss.Endpoint {
+	return &fileSystem.Endpoint
 }
 
-func (fileSystem FileSystem) GetURL(p ...string) string {
+func (fileSystem FileSystem) GetURL(p ...string) (url string) {
+	url = fileSystem.Endpoint.URL()
 	if len(p) > 0 {
-		return "/" + strings.TrimPrefix(strings.Join(p, "/"), "/")
+		url += "/" + strings.TrimPrefix(strings.Join(p, "/"), "/")
 	}
-	return "/"
+	return
+}
+
+func (fileSystem FileSystem) GetDynamicURL(scheme, host string, p ...string) (url string) {
+	return fileSystem.GetURL(p...)
 }
