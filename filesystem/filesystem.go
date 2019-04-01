@@ -13,7 +13,7 @@ import (
 
 	"github.com/ecletus/oss/factories"
 
-	"github.com/moisespsena/go-error-wrap"
+	"github.com/moisespsena-go/error-wrap"
 
 	"github.com/moisespsena-go/path-helpers"
 
