@@ -3,7 +3,7 @@ package factories
 import (
 	"github.com/ecletus/oss"
 	"github.com/moisespsena-go/stringvar"
-	"github.com/moisespsena/go-options"
+	"github.com/moisespsena-go/options"
 )
 
 type Context struct {
