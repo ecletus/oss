@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ecletus/helpers"
+	"github.com/moisespsena-go/assetfs"
 
 	"github.com/ecletus/oss"
 	"github.com/ecletus/oss/factories"
@@ -253,4 +254,8 @@ func (client Client) GetDynamicURL(scheme, host string, p ...string) (url string
 		url += "/" + strings.TrimPrefix(strings.Join(p, "/"), "/")
 	}
 	return
+}
+
+func (this Client) AssetFS() (assetfs.Interface, error) {
+	return nil, oss.ErrAssetFsUnavailable
 }

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/moisespsena-go/assetfs/assetfsapi"
 )
 
 type Endpoint struct {
@@ -51,6 +53,7 @@ type StorageInterface interface {
 	GetEndpoint() *Endpoint
 	GetURL(p ...string) string
 	GetDynamicURL(scheme, host string, p ...string) (url string)
+	AssetFS() (assetfsapi.Interface, error)
 }
 
 type NamedStorageInterface interface {

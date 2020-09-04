@@ -2,7 +2,11 @@ package filesystem
 
 import (
 	"fmt"
+
 	"github.com/mitchellh/go-homedir"
+	"github.com/moisespsena-go/assetfs"
+	"github.com/pkg/errors"
+
 	"io"
 	"net/http"
 	"os"
@@ -13,9 +17,9 @@ import (
 
 	"github.com/ecletus/oss/factories"
 
-	"github.com/moisespsena-go/error-wrap"
+	errwrap "github.com/moisespsena-go/error-wrap"
 
-	"github.com/moisespsena-go/path-helpers"
+	path_helpers "github.com/moisespsena-go/path-helpers"
 
 	"github.com/ecletus/oss"
 )
@@ -65,22 +69,22 @@ func New(cfg *Config) *FileSystem {
 	return &FileSystem{Base: absbase, Endpoint: *cfg.Endpoint}
 }
 
-func (f FileSystem) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	pth := f.GetFullPath(r.URL.Path)
+func (this *FileSystem) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	pth := this.GetFullPath(r.URL.Path)
 	http.ServeFile(w, r, pth)
 }
 
 // GetFullPath get full path from absolute/relative path
-func (fileSystem FileSystem) GetFullPath(path string) string {
+func (this *FileSystem) GetFullPath(path string) string {
 	fullpath := path
-	if !strings.HasPrefix(path, fileSystem.Base) {
-		fullpath, _ = filepath.Abs(filepath.Join(fileSystem.Base, path))
+	if !strings.HasPrefix(path, this.Base) {
+		fullpath, _ = filepath.Abs(filepath.Join(this.Base, path))
 	}
 	return fullpath
 }
 
-func (fileSystem FileSystem) Stat(path string) (info os.FileInfo, notFound bool, err error) {
-	info, err = os.Stat(fileSystem.GetFullPath(path))
+func (this *FileSystem) Stat(path string) (info os.FileInfo, notFound bool, err error) {
+	info, err = os.Stat(this.GetFullPath(path))
 	if err != nil && os.IsNotExist(err) {
 		return nil, true, nil
 	}
@@ -88,50 +92,57 @@ func (fileSystem FileSystem) Stat(path string) (info os.FileInfo, notFound bool,
 }
 
 // Get receive file with given path
-func (fileSystem FileSystem) Get(path string) (*os.File, error) {
-	return os.Open(fileSystem.GetFullPath(path))
+func (this *FileSystem) Get(path string) (*os.File, error) {
+	return os.Open(this.GetFullPath(path))
 }
 
 // Put store a reader into given path
-func (fileSystem FileSystem) Put(path string, reader io.Reader) (*oss.Object, error) {
+func (this *FileSystem) Put(path string, reader io.Reader) (*oss.Object, error) {
 	var (
-		fullpath      = fileSystem.GetFullPath(path)
+		fullpath      = this.GetFullPath(path)
 		base          = filepath.Dir(fullpath)
-		baseMode, err = path_helpers.ResolvePerms(base)
+		baseMode, err = path_helpers.ResolveMode(base)
+		fileMode      os.FileMode
 	)
 
 	if err != nil {
 		return nil, errwrap.Wrap(err, "Resolve mode of %q", base)
 	}
 
-	if err = os.MkdirAll(base, os.FileMode(baseMode)); err != nil {
+	if err = os.MkdirAll(base, baseMode); err != nil {
 		return nil, errwrap.Wrap(err, "Create base directory %q", base)
 	}
 
-	dst, err := os.Create(fullpath)
+	if fileMode, err = path_helpers.ResolveFileMode(fullpath); err != nil {
+		return nil, errwrap.Wrap(err, "Resolve mode of %q", fullpath)
+	}
 
+	dst, err := os.OpenFile(fullpath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, fileMode)
 	if err != nil {
 		return nil, errwrap.Wrap(err, "Create file %q", fullpath)
 	}
+	defer dst.Close()
 
 	if seeker, ok := reader.(io.ReadSeeker); ok {
 		seeker.Seek(0, 0)
 	}
-	_, err = io.Copy(dst, reader)
+	if _, err = io.Copy(dst, reader); err != nil {
+		return nil, err
+	}
 
-	return &oss.Object{Path: path, Name: filepath.Base(path), StorageInterface: fileSystem}, err
+	return &oss.Object{Path: path, Name: filepath.Base(path), StorageInterface: this}, err
 }
 
 // Delete delete file
-func (fileSystem FileSystem) Delete(path string) error {
-	return os.Remove(fileSystem.GetFullPath(path))
+func (this FileSystem) Delete(path string) error {
+	return os.Remove(this.GetFullPath(path))
 }
 
 // List list all objects under current path
-func (fileSystem FileSystem) List(path string) ([]*oss.Object, error) {
+func (this *FileSystem) List(path string) ([]*oss.Object, error) {
 	var (
 		objects  []*oss.Object
-		fullpath = fileSystem.GetFullPath(path)
+		fullpath = this.GetFullPath(path)
 	)
 
 	filepath.Walk(fullpath, func(path string, info os.FileInfo, err error) error {
@@ -142,10 +153,10 @@ func (fileSystem FileSystem) List(path string) ([]*oss.Object, error) {
 		if err == nil && !info.IsDir() {
 			modTime := info.ModTime()
 			objects = append(objects, &oss.Object{
-				Path:             strings.TrimPrefix(path, fileSystem.Base),
+				Path:             strings.TrimPrefix(path, this.Base),
 				Name:             info.Name(),
 				LastModified:     &modTime,
-				StorageInterface: fileSystem,
+				StorageInterface: this,
 			})
 		}
 		return nil
@@ -155,18 +166,26 @@ func (fileSystem FileSystem) List(path string) ([]*oss.Object, error) {
 }
 
 // GetEndpoint get Endpoint, FileSystem's Endpoint is /
-func (fileSystem FileSystem) GetEndpoint() *oss.Endpoint {
-	return &fileSystem.Endpoint
+func (this *FileSystem) GetEndpoint() *oss.Endpoint {
+	return &this.Endpoint
 }
 
-func (fileSystem FileSystem) GetURL(p ...string) (url string) {
-	url = fileSystem.Endpoint.URL()
+func (this *FileSystem) GetURL(p ...string) (url string) {
+	url = this.Endpoint.URL()
 	if len(p) > 0 {
 		url += "/" + strings.TrimPrefix(strings.Join(p, "/"), "/")
 	}
 	return
 }
 
-func (fileSystem FileSystem) GetDynamicURL(scheme, host string, p ...string) (url string) {
-	return fileSystem.GetURL(p...)
+func (this *FileSystem) GetDynamicURL(scheme, host string, p ...string) (url string) {
+	return this.GetURL(p...)
+}
+
+func (this *FileSystem) AssetFS() (_ assetfs.Interface, err error) {
+	fs := assetfs.NewAssetFileSystem()
+	if err = fs.RegisterPath(filepath.Join(this.Base, "assets")); err != nil {
+		err = errors.Wrapf(err, "register path %q", this.Base)
+	}
+	return fs, nil
 }
